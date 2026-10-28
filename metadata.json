@@ -1,0 +1,6 @@
+{
+  "name": "Hunt + Capture - Commercial Production Call Sheet",
+  "description": "Mobile-first real-time call sheet app for commercial advertising productions fed by Google Sheets with live schedules, locations, crew contacts, privacy controls, and safety protocols.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
