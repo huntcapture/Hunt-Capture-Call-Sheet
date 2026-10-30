@@ -27,6 +27,14 @@ import { GoogleSheetBlueprintModal } from './components/GoogleSheetBlueprintModa
 import { ShareModal } from './components/ShareModal';
 import { NotificationBanner } from './components/NotificationBanner';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
+import { JobSwitcherModal } from './components/JobSwitcherModal';
+import type { ProductionJob } from './types/job';
+import {
+  loadStoredJobs,
+  saveStoredJobs,
+  getInitialActiveJobId,
+  STORAGE_KEY_ACTIVE_JOB_ID,
+} from './services/jobManager';
 import type { CallSheetNotification, NotificationSettings } from './types/notification';
 import { DEFAULT_NOTIFICATION_SETTINGS } from './types/notification';
 import {
@@ -42,24 +50,78 @@ const STORAGE_KEY_NOTIFS = 'hunt_capture_notifications_v1';
 const STORAGE_KEY_NOTIF_SETTINGS = 'hunt_capture_notif_settings_v1';
 
 export default function App() {
-  // Load cached callsheet or fallback to high-fidelity demo
-  const [callSheet, setCallSheet] = useState<CallSheetData>(() => {
-    try {
-      const cached = localStorage.getItem(STORAGE_KEY_CALLSHEET);
-      if (cached) return JSON.parse(cached);
-    } catch {
-      // ignore
-    }
-    return DEFAULT_CALL_SHEET;
-  });
+  // Multi-job commercial production slate
+  const [jobs, setJobs] = useState<ProductionJob[]>(() => loadStoredJobs());
+  const [activeJobId, setActiveJobId] = useState<string>(() => getInitialActiveJobId(jobs));
+  const [isJobSwitcherOpen, setIsJobSwitcherOpen] = useState(false);
+
+  // Active Job & Active CallSheet
+  const activeJob = jobs.find((j) => j.id === activeJobId) || jobs[0];
+  const callSheet = activeJob.callSheetData;
 
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(() => {
     return localStorage.getItem(STORAGE_KEY_PERSON_ID);
   });
 
   const [sheetIdInput, setSheetIdInput] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEY_SHEET_ID) || '';
+    return activeJob.googleSheetId || localStorage.getItem(STORAGE_KEY_SHEET_ID) || '';
   });
+
+  // Sync sheetIdInput when activeJob changes
+  useEffect(() => {
+    if (activeJob.googleSheetId) {
+      setSheetIdInput(activeJob.googleSheetId);
+    }
+  }, [activeJobId, activeJob.googleSheetId]);
+
+  // Persist activeJobId and sync URL search param (?job=ID)
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_ACTIVE_JOB_ID, activeJobId);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('job', activeJobId);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [activeJobId]);
+
+  // Persist full jobs array to localStorage
+  useEffect(() => {
+    saveStoredJobs(jobs);
+  }, [jobs]);
+
+  // Updater for active job's call sheet
+  const setCallSheet = (
+    updater: CallSheetData | ((prev: CallSheetData) => CallSheetData)
+  ) => {
+    setJobs((prevJobs) =>
+      prevJobs.map((j) => {
+        if (j.id === activeJobId) {
+          const updatedData =
+            typeof updater === 'function' ? updater(j.callSheetData) : updater;
+          return {
+            ...j,
+            callSheetData: updatedData,
+            crewCount: updatedData.personnel.length,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return j;
+      })
+    );
+  };
+
+  const handleSelectJob = (jobId: string) => {
+    setActiveJobId(jobId);
+    setSelectedPersonId(null);
+    localStorage.removeItem(STORAGE_KEY_PERSON_ID);
+  };
+
+  const handleCreateJob = (newJob: ProductionJob) => {
+    setJobs((prev) => [newJob, ...prev]);
+    setActiveJobId(newJob.id);
+    setSelectedPersonId(null);
+    localStorage.removeItem(STORAGE_KEY_PERSON_ID);
+  };
 
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_AUTO_REFRESH);
@@ -417,6 +479,9 @@ export default function App() {
       {/* Sticky Film Slate Header */}
       <Header
         callSheet={callSheet}
+        activeJobCode={activeJob.jobCode}
+        allJobsCount={jobs.length}
+        onOpenJobSwitcher={() => setIsJobSwitcherOpen(true)}
         onOpenSyncModal={() => setIsSyncModalOpen(true)}
         onOpenShareModal={() => setIsShareModalOpen(true)}
         onOpenNotificationCenter={() => {
@@ -519,6 +584,18 @@ export default function App() {
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
         callSheet={callSheet}
+        jobId={activeJob.id}
+        jobCode={activeJob.jobCode}
+      />
+
+      {/* Multi-Job Slate & Crew Access Hub Modal */}
+      <JobSwitcherModal
+        isOpen={isJobSwitcherOpen}
+        onClose={() => setIsJobSwitcherOpen(false)}
+        jobs={jobs}
+        activeJobId={activeJobId}
+        onSelectJob={handleSelectJob}
+        onCreateJob={handleCreateJob}
       />
 
       {/* Notification Center & Settings Modal */}

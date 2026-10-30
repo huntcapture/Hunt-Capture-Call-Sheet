@@ -16,16 +16,27 @@ interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
   callSheet: CallSheetData;
+  jobId?: string;
+  jobCode?: string;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
   isOpen,
   onClose,
   callSheet,
+  jobId,
+  jobCode,
 }) => {
   const [copiedType, setCopiedType] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const shareUrl =
+    typeof window !== 'undefined'
+      ? jobId
+        ? `${window.location.origin}${window.location.pathname}?job=${encodeURIComponent(jobId)}`
+        : window.location.href
+      : '';
 
   const { production, locations, safety } = callSheet;
   const shootLoc = locations.find((l) => l.type === 'shoot') || locations[0];
@@ -65,7 +76,7 @@ Emergency Channel: ${safety.emergencyChannel}
 ${safety.etiquetteRules.map((rule, i) => `${i + 1}. ${rule}`).join('\n')}
 
 📱 Access Live Mobile Call Sheet:
-${window.location.href}`;
+${shareUrl}`;
   };
 
   // Safety & Hospital Only Summary
@@ -90,7 +101,7 @@ ${shootLoc ? `${shootLoc.name} — ${shootLoc.address}, ${shootLoc.cityStateZip}
 ⚠️ MANDATORY LOCATION ETIQUETTE:
 ${safety.etiquetteRules.map((rule, i) => `• ${rule}`).join('\n')}
 
-Live Call Sheet App: ${window.location.href}`;
+Live Call Sheet App: ${shareUrl}`;
   };
 
   const handleCopy = (text: string, type: string) => {
@@ -105,7 +116,7 @@ Live Call Sheet App: ${window.location.href}`;
         await navigator.share({
           title,
           text,
-          url: window.location.href,
+          url: shareUrl,
         });
       } catch (err) {
         // User cancelled or share failed
@@ -141,6 +152,42 @@ Live Call Sheet App: ${window.location.href}`;
 
         {/* Modal Body */}
         <div className="p-4 space-y-3.5 overflow-y-auto custom-scrollbar text-xs text-zinc-300 flex-1">
+          {/* Direct Crew Link Card */}
+          <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-1.5 text-amber-400 font-bold text-xs">
+                <span>Crew Direct Job Link</span>
+                {jobCode && (
+                  <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-[10px] font-mono">
+                    Code: {jobCode}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => handleCopy(shareUrl, 'crew_url')}
+                className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] flex items-center space-x-1 transition-colors"
+              >
+                {copiedType === 'crew_url' ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Copied Link!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Link</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-400">
+              Sends crew directly to this call sheet. They won't see other commercial jobs.
+            </p>
+            <div className="p-2 rounded bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-zinc-300 truncate">
+              {shareUrl}
+            </div>
+          </div>
+
           {/* Quick Share to Mobile Apps */}
           <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-2">
             <div className="flex items-center space-x-2 text-white font-bold text-xs">
